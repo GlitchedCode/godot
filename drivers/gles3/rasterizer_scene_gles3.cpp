@@ -2079,7 +2079,7 @@ void RasterizerSceneGLES3::_render_list(RenderList::Element **p_elements, int p_
 				int desired_blend_mode;
 				if (desired_blend_mode == RasterizerStorageGLES3::Shader::Spatial::BLEND_MODE_DISABLED && (!storage->frame.current_rt || !storage->frame.current_rt->flags[RasterizerStorage::RENDER_TARGET_TRANSPARENT])) {
 					desired_blend_mode = RasterizerStorageGLES3::Shader::Spatial::BLEND_MODE_MIX;
-                }
+				}
 				if (p_directional_add) {
 					desired_blend_mode = RasterizerStorageGLES3::Shader::Spatial::BLEND_MODE_ADD;
 				} else {
