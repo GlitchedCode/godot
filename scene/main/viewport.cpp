@@ -3214,6 +3214,9 @@ void Viewport::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("set_hdr", "enable"), &Viewport::set_hdr);
 	ClassDB::bind_method(D_METHOD("get_hdr"), &Viewport::get_hdr);
+	
+	ClassDB::bind_method(D_METHOD("set_use_32_bpc_depth", "enable"), &Viewport::set_use_32_bpc_depth);
+        ClassDB::bind_method(D_METHOD("get_use_32_bpc_depth"), &Viewport::is_using_32_bpc_depth);
 
 	ClassDB::bind_method(D_METHOD("set_use_32_bpc_depth", "enable"), &Viewport::set_use_32_bpc_depth);
 	ClassDB::bind_method(D_METHOD("get_use_32_bpc_depth"), &Viewport::is_using_32_bpc_depth);
