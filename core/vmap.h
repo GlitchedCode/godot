@@ -54,7 +54,7 @@ private:
 
 	_FORCE_INLINE_ int _find(const T &p_val, bool &r_exact) const {
 		r_exact = false;
-		if (_cowdata.empty()) {
+		if (_cowdata.is_empty()) {
 			return 0;
 		}
 
@@ -88,7 +88,7 @@ private:
 	}
 
 	_FORCE_INLINE_ int _find_exact(const T &p_val) const {
-		if (_cowdata.empty()) {
+		if (_cowdata.is_empty()) {
 			return -1;
 		}
 
@@ -149,7 +149,7 @@ public:
 	}
 
 	_FORCE_INLINE_ int size() const { return _cowdata.size(); }
-	_FORCE_INLINE_ bool empty() const { return _cowdata.empty(); }
+	_FORCE_INLINE_ bool empty() const { return _cowdata.is_empty(); }
 
 	const Pair *get_array() const {
 		return _cowdata.ptr();

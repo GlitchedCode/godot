@@ -33,6 +33,7 @@
 #include "scene/scene_string_names.h"
 #include "servers/visual/shader_language.h"
 #include "servers/visual_server.h"
+#include "core/print_string.h"
 #include "texture.h"
 
 Shader::Mode Shader::get_mode() const {
@@ -50,7 +51,17 @@ void Shader::set_code(const String &p_code) {
 		mode = MODE_SPATIAL;
 	}
 
-	VisualServer::get_singleton()->shader_set_code(shader, p_code);
+	String code(p_code);
+	source_code = code;
+
+	List<String> macro_names;
+	preprocessor_defines.get_key_list(&macro_names);
+	String macros = "";
+	for(String name : macro_names) {
+		macros += "#define " + name + " " + preprocessor_defines[name] + "\n";
+	}
+
+	VisualServer::get_singleton()->shader_set_code(shader, macros + source_code);
 	params_cache_dirty = true;
 
 	emit_changed();
@@ -58,7 +69,32 @@ void Shader::set_code(const String &p_code) {
 
 String Shader::get_code() const {
 	_update_shader();
-	return VisualServer::get_singleton()->shader_get_code(shader);
+	return source_code;
+}
+
+void Shader::set_preprocessor_define(String name, String body) {
+	preprocessor_defines[name] = body;
+}
+
+void Shader::unset_preprocessor_define(String name) {
+	preprocessor_defines.erase(name);
+}
+
+bool Shader::is_preprocessor_macro_defined(String name) {
+	_update_shader();
+	return preprocessor_defines.has(name);
+}
+
+void Shader::recompile() {
+	set_code(source_code);
+}
+
+String Shader::get_preprocessor_define(String name){
+	_update_shader();
+	if(preprocessor_defines.has(name))
+		return preprocessor_defines[name];
+	
+	return "";
 }
 
 void Shader::get_param_list(List<PropertyInfo> *p_params) const {
@@ -151,6 +187,13 @@ void Shader::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("set_code", "code"), &Shader::set_code);
 	ClassDB::bind_method(D_METHOD("get_code"), &Shader::get_code);
+
+	ClassDB::bind_method(D_METHOD("set_preprocessor_define", "name", "body"), &Shader::set_preprocessor_define);
+	ClassDB::bind_method(D_METHOD("unset_preprocessor_define", "name"), &Shader::unset_preprocessor_define);
+	ClassDB::bind_method(D_METHOD("is_preprocessor_macro_defined", "name"), &Shader::is_preprocessor_macro_defined);
+	ClassDB::bind_method(D_METHOD("get_preprocessor_define", "name"), &Shader::get_preprocessor_define);
+
+	ClassDB::bind_method(D_METHOD("recompile"), &Shader::recompile);
 
 	ClassDB::bind_method(D_METHOD("set_default_texture_param", "param", "texture"), &Shader::set_default_texture_param);
 	ClassDB::bind_method(D_METHOD("get_default_texture_param", "param"), &Shader::get_default_texture_param);

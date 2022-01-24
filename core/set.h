@@ -49,12 +49,12 @@ public:
 	class Element {
 	private:
 		friend class Set<T, C, A>;
-		int color;
-		Element *right;
-		Element *left;
-		Element *parent;
-		Element *_next;
-		Element *_prev;
+		int color = RED;
+		Element *right = nullptr;
+		Element *left = nullptr;
+		Element *parent = nullptr;
+		Element *_next = nullptr;
+		Element *_prev = nullptr;
 		T value;
 		//_Data *data;
 
@@ -71,24 +71,99 @@ public:
 		Element *prev() {
 			return _prev;
 		}
+		T &get() {
+			return value;
+		}
 		const T &get() const {
 			return value;
 		};
-		Element() {
-			color = RED;
-			right = nullptr;
-			left = nullptr;
-			parent = nullptr;
-			_next = nullptr;
-			_prev = nullptr;
-		};
+		Element() {}
 	};
 
+	typedef T ValueType;
+
+	struct Iterator {
+		_FORCE_INLINE_ T &operator*() const {
+			return E->get();
+		}
+		_FORCE_INLINE_ T *operator->() const { return &E->get(); }
+		_FORCE_INLINE_ Iterator &operator++() {
+			E = E->next();
+			return *this;
+		}
+		_FORCE_INLINE_ Iterator &operator--() {
+			E = E->prev();
+			return *this;
+		}
+
+		_FORCE_INLINE_ bool operator==(const Iterator &b) const { return E == b.E; }
+		_FORCE_INLINE_ bool operator!=(const Iterator &b) const { return E != b.E; }
+
+		Iterator(Element *p_E) { E = p_E; }
+		Iterator() {}
+		Iterator(const Iterator &p_it) { E = p_it.E; }
+
+	private:
+		Element *E = nullptr;
+	};
+
+	struct ConstIterator {
+		_FORCE_INLINE_ const T &operator*() const {
+			return E->get();
+		}
+		_FORCE_INLINE_ const T *operator->() const { return &E->get(); }
+		_FORCE_INLINE_ ConstIterator &operator++() {
+			E = E->next();
+			return *this;
+		}
+		_FORCE_INLINE_ ConstIterator &operator--() {
+			E = E->prev();
+			return *this;
+		}
+
+		_FORCE_INLINE_ bool operator==(const ConstIterator &b) const { return E == b.E; }
+		_FORCE_INLINE_ bool operator!=(const ConstIterator &b) const { return E != b.E; }
+
+		_FORCE_INLINE_ ConstIterator(const Element *p_E) { E = p_E; }
+		_FORCE_INLINE_ ConstIterator() {}
+		_FORCE_INLINE_ ConstIterator(const ConstIterator &p_it) { E = p_it.E; }
+
+	private:
+		const Element *E = nullptr;
+	};
+
+	_FORCE_INLINE_ Iterator begin() {
+		return Iterator(front());
+	}
+	_FORCE_INLINE_ Iterator end() {
+		return Iterator(nullptr);
+	}
+
+#if 0
+	//to use when replacing find()
+	_FORCE_INLINE_ Iterator find(const K &p_key) {
+		return Iterator(find(p_key));
+	}
+#endif
+
+	_FORCE_INLINE_ ConstIterator begin() const {
+		return ConstIterator(front());
+	}
+	_FORCE_INLINE_ ConstIterator end() const {
+		return ConstIterator(nullptr);
+	}
+
+#if 0
+	//to use when replacing find()
+	_FORCE_INLINE_ ConstIterator find(const K &p_key) const {
+		return ConstIterator(find(p_key));
+	}
+#endif
 private:
 	struct _Data {
-		Element *_root;
-		Element *_nil;
-		int size_cache;
+		Element *_root = nullptr;
+		Element *_nil = nullptr;
+		int size_cache = 0;
 
 		_FORCE_INLINE_ _Data() {
 #ifdef GLOBALNIL_DISABLED
@@ -98,8 +173,6 @@ private:
 #else
 			_nil = (Element *)&_GlobalNilClass::_nil;
 #endif
-			_root = nullptr;
-			size_cache = 0;
 		}
 
 		void _create_root() {
@@ -588,7 +661,7 @@ public:
 		return e;
 	}
 
-	inline bool empty() const { return _data.size_cache == 0; }
+	inline bool is_empty() const { return _data.size_cache == 0; }
 	inline int size() const { return _data.size_cache; }
 
 	int calculate_depth() const {
@@ -621,12 +694,12 @@ public:
 		_copy_from(p_set);
 	}
 
-	_FORCE_INLINE_ Set() {
-	}
+	_FORCE_INLINE_ Set() {}
 
 	~Set() {
 		clear();
 	}
 };
+
 
 #endif

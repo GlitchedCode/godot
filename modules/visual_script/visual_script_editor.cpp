@@ -1741,7 +1741,7 @@ void VisualScriptEditor::_on_nodes_duplicate() {
 		}
 	}
 
-	if (to_duplicate.empty()) {
+	if (to_duplicate.is_empty()) {
 		return;
 	}
 

@@ -39,6 +39,7 @@
 #include "editor/editor_scale.h"
 #include "editor/editor_settings.h"
 #include "editor/property_editor.h"
+#include "servers/visual/shader_preprocessor.h"
 #include "servers/visual/shader_types.h"
 
 /*** SHADER SCRIPT EDITOR ****/
@@ -46,7 +47,12 @@
 Ref<Shader> ShaderTextEditor::get_edited_shader() const {
 	return shader;
 }
+
 void ShaderTextEditor::set_edited_shader(const Ref<Shader> &p_shader) {
+	set_edited_shader(p_shader, p_shader->get_code());
+}
+
+void ShaderTextEditor::set_edited_shader(const Ref<Shader> &p_shader, String code) {
 	if (shader == p_shader) {
 		return;
 	}
@@ -54,7 +60,7 @@ void ShaderTextEditor::set_edited_shader(const Ref<Shader> &p_shader) {
 
 	_load_theme_settings();
 
-	get_text_edit()->set_text(p_shader->get_code());
+	get_text_edit()->set_text(code);
 	get_text_edit()->clear_undo_history();
 	get_text_edit()->call_deferred("set_h_scroll", 0);
 	get_text_edit()->call_deferred("set_v_scroll", 0);
@@ -81,6 +87,14 @@ void ShaderTextEditor::reload_text() {
 	te->tag_saved_version();
 
 	update_line_and_column();
+}
+
+void ShaderTextEditor::set_shader_editor(ShaderEditor *p_editor) {
+	shader_editor = p_editor;
+}
+
+void ShaderTextEditor::set_shader_dependency_tree(Tree *p_tree) {
+	shader_dependency_tree = p_tree;
 }
 
 void ShaderTextEditor::_load_theme_settings() {
@@ -220,19 +234,94 @@ void ShaderTextEditor::_validate_script() {
 	//List<StringName> params;
 	//shader->get_param_list(&params);
 
+	shader->set_code(code);
+	shader_editor->shader_rolling_code[shader->get_path()] = code;
+
+	// reset code to parent shader code
+	code = shader_editor->get_shader()->get_code();
+
+	shader_editor->shader_dependencies.populate(shader_editor->get_shader());
+	shader_editor->_update_shader_dependency_tree();
+
+
+	ShaderPreprocessor processor(code);
+	String processed = processor.preprocess();
+
+	PreprocessorState *state = processor.get_state();
+	if (!state->error.empty()) {
+		// couldn't preprocess, so no sense in validating. Need to feed back issues to user.
+		// only write include path if there are includes
+		if (shader_editor->shader_dependencies.size() > 1) {
+			String error_text = "error(" + state->current_include + ":" + itos(state->error_line) + "): " + state->error;
+			set_error(error_text);
+		} else {
+			String error_text = "error(" + itos(state->error_line) + "): " + state->error;
+			set_error(error_text);
+		}
+
+		set_error_pos(state->error_line - 1, 0);
+
+		bool highlight_error = false;
+		if (!state->current_include.empty()) {
+			TreeItem *tree_item = shader_dependency_tree->get_item_with_text(state->current_include);
+
+			error_shader_path = state->current_include;
+
+			if (shader->get_path() == error_shader_path) {
+				highlight_error = true;
+			}
+		} else {
+			highlight_error = true;
+		}
+
+		for (int i = 0; i < get_text_edit()->get_line_count(); i++) {
+			get_text_edit()->set_line_as_marked(i, false);
+		}
+
+		if(highlight_error) {
+			get_text_edit()->set_line_as_marked(state->error_line - 1, true);
+		}
+
+		return;
+	}
+
 	ShaderLanguage sl;
 
 	Error err = sl.compile(code, ShaderTypes::get_singleton()->get_functions(VisualServer::ShaderMode(shader->get_mode())), ShaderTypes::get_singleton()->get_modes(VisualServer::ShaderMode(shader->get_mode())), ShaderTypes::get_singleton()->get_types());
 
 	if (err != OK) {
-		String error_text = "error(" + itos(sl.get_error_line()) + "): " + sl.get_error_text();
-		set_error(error_text);
-		set_error_pos(sl.get_error_line() - 1, 0);
-		for (int i = 0; i < get_text_edit()->get_line_count(); i++) {
-			get_text_edit()->set_line_as_marked(i, false);
+		ShaderDependencyNode *context;
+		int adjusted_line = sl.get_error_line();
+		for (ShaderDependencyNode *node : shader_editor->shader_dependencies.nodes) {
+			adjusted_line = node->GetContext(sl.get_error_line(), &context);
+			break;
 		}
-		get_text_edit()->set_line_as_marked(sl.get_error_line() - 1, true);
 
+		bool highlight_error = false;
+		error_shader_path = shader->get_path();
+		if (context) {
+			if (!context->get_path().empty()) {
+				TreeItem *tree_item = shader_dependency_tree->get_item_with_text(context->get_path());
+
+				error_shader_path = context->get_path();
+			} else {
+				highlight_error = true;
+			}
+		}
+
+		// only write include path if there are includes
+		if (shader_editor->shader_dependencies.size() > 1) {
+			String error_text = "error(" + error_shader_path + ":" + itos(adjusted_line) + "): " + sl.get_error_text();
+			set_error(error_text);
+		} else {
+			String error_text = "error(" + itos(adjusted_line) + "): " + sl.get_error_text();
+			set_error(error_text);
+		}
+		set_error_pos(adjusted_line - 1, 0);
+
+		if (highlight_error) {
+			get_text_edit()->set_line_as_marked(adjusted_line - 1, true);
+ 		}
 	} else {
 		for (int i = 0; i < get_text_edit()->get_line_count(); i++) {
 			get_text_edit()->set_line_as_marked(i, false);
@@ -241,6 +330,23 @@ void ShaderTextEditor::_validate_script() {
 	}
 
 	emit_signal("script_changed");
+}
+
+void ShaderTextEditor::goto_error() {
+	if (!error_shader_path.empty()) {
+		shader_editor->open_path(error_shader_path);
+
+		int error_line;
+		int error_column;
+		get_error_pos(error_line, error_column);
+
+		for (int i = 0; i < get_text_edit()->get_line_count(); i++) {
+			get_text_edit()->set_line_as_marked(i, false);
+		}
+		get_text_edit()->set_line_as_marked(error_line, true);
+	}
+
+	CodeTextEditor::goto_error();
 }
 
 void ShaderTextEditor::_bind_methods() {
@@ -454,6 +560,21 @@ void ShaderEditor::edit(const Ref<Shader> &p_shader) {
 
 	shader = p_shader;
 
+	// create shader dependencies and update tree.
+	shader_rolling_code.clear();
+	shader_dependencies.populate(shader);
+	_update_shader_dependency_tree();
+
+	// show and hide dep tree based on amount of deps. If 1 dep, don't show.
+	if (shader_dependencies.size() > 1) {
+		shader_dependency_tree->show();
+	} else {
+		shader_dependency_tree->hide();
+	}
+
+	shader_rolling_code[shader->get_path()] = p_shader->get_code();
+
+
 	shader_editor->set_edited_shader(p_shader);
 
 	//vertex_editor->set_edited_shader(shader,ShaderLanguage::SHADER_MATERIAL_VERTEX);
@@ -469,6 +590,8 @@ void ShaderEditor::save_external_data(const String &p_str) {
 	apply_shaders();
 	if (shader->get_path() != "" && shader->get_path().find("local://") == -1 && shader->get_path().find("::") == -1) {
 		//external shader, save it
+		Ref<Shader> edited_shader = shader_editor->get_edited_shader();
+		ResourceSaver::save(edited_shader->get_path(), edited_shader);
 		ResourceSaver::save(shader->get_path(), shader);
 	}
 
@@ -477,12 +600,21 @@ void ShaderEditor::save_external_data(const String &p_str) {
 
 void ShaderEditor::apply_shaders() {
 	if (shader.is_valid()) {
-		String shader_code = shader->get_code();
+		Ref<Shader> currently_edited_shader = shader_editor->get_edited_shader();
 		String editor_code = shader_editor->get_text_edit()->get_text();
-		if (shader_code != editor_code) {
-			shader->set_code(editor_code);
-			shader->set_edited(true);
+		shader_rolling_code[currently_edited_shader->get_path()] = editor_code;
+		if (currently_edited_shader == shader) {
+			String shader_code = shader->get_code();
+			if (shader_code != editor_code) {
+				shader->set_code(editor_code);
+				shader->set_edited(true);
+			}
+		} else {
+			currently_edited_shader->set_code(editor_code);
+			currently_edited_shader->set_edited(true);
 		}
+
+		ShaderPreprocessor::refresh_shader_dependencies(*shader);
 	}
 }
 
@@ -584,8 +716,65 @@ void ShaderEditor::_make_context_menu(bool p_selection, Vector2 p_position) {
 	context_menu->popup();
 }
 
+void ShaderEditor::open_path(String p_path) {
+	RES res = ResourceLoader::load(p_path);
+	if (!res.is_null()) {
+		Ref<Shader> shader = Object::cast_to<Shader>(*res);
+		if (!shader.is_null()) {
+			Map<String, String>::Element *rolling_code = shader_rolling_code.find(shader->get_path());
+
+			if (rolling_code) {
+				shader_editor->set_edited_shader(shader, rolling_code->get());
+			} else {
+				String included = shader->get_code();
+				shader_rolling_code[p_path] = included;
+				shader_editor->set_edited_shader(shader);
+			}
+		}
+	}
+}
+
+Ref<Shader> ShaderEditor::get_shader() {
+	return shader;
+}
+
+void ShaderEditor::_tree_activate_shader() {
+	TreeItem *selected = shader_dependency_tree->get_selected();
+	if (selected) {
+		String path = selected->get_metadata(0);
+
+		open_path(path);
+	}
+}
+
+void ShaderEditor::_update_shader_dependency_tree() {
+	shader_dependency_tree->clear();
+	TreeItem *root = shader_dependency_tree->create_item();
+	root->select(0);
+
+	for (ShaderDependencyNode *node : shader_dependencies.nodes) {
+		TreeItem *shader_parent_item = shader_dependency_tree->create_item(root);
+		shader_parent_item->set_text(0, TTR(node->get_path()));
+		shader_parent_item->set_metadata(0, node->get_path());
+
+		_update_shader_dependency_tree_items(shader_parent_item, node);
+	}
+}
+
+void ShaderEditor::_update_shader_dependency_tree_items(TreeItem *p_parent_tree_item, ShaderDependencyNode *p_node) {
+	for (ShaderDependencyNode *child_node : p_node->dependencies) {
+		TreeItem *shader_child_item = shader_dependency_tree->create_item(p_parent_tree_item);
+		shader_child_item->set_text(0, TTR(child_node->get_path()));
+		shader_child_item->set_metadata(0, child_node->get_path());
+
+		_update_shader_dependency_tree_items(shader_child_item, child_node);
+	}
+}
+
 ShaderEditor::ShaderEditor(EditorNode *p_node) {
 	shader_editor = memnew(ShaderTextEditor);
+	shader_editor->set_shader_editor(this);
+
 	shader_editor->set_v_size_flags(SIZE_EXPAND_FILL);
 	shader_editor->add_constant_override("separation", 0);
 	shader_editor->set_anchors_and_margins_preset(Control::PRESET_WIDE);
@@ -609,6 +798,7 @@ ShaderEditor::ShaderEditor(EditorNode *p_node) {
 	context_menu->set_hide_on_window_lose_focus(true);
 
 	VBoxContainer *main_container = memnew(VBoxContainer);
+	add_child(main_container);
 	HBoxContainer *hbc = memnew(HBoxContainer);
 
 	edit_menu = memnew(MenuButton);
@@ -693,6 +883,15 @@ ShaderEditor::ShaderEditor(EditorNode *p_node) {
 
 	disk_changed->add_button(TTR("Resave"), !OS::get_singleton()->get_swap_ok_cancel(), "resave");
 	disk_changed->connect("custom_action", this, "save_external_data");
+
+	shader_dependency_tree = memnew(Tree);
+	shader_dependency_tree->set_hide_root(true);
+	shader_dependency_tree->set_allow_rmb_select(true);
+	//shader_dependency_tree->set_anchors_and_offsets_preset(Control::PRESET_TOP_RIGHT, Control::PRESET_MODE_KEEP_WIDTH);
+	shader_dependency_tree->set_select_mode(Tree::SELECT_SINGLE);
+	shader_dependency_tree->set_custom_minimum_size(Size2(100 * EDSCALE, 30 * EDSCALE));
+	//shader_dependency_tree->connect("item_activated", callable_mp(this, &ShaderEditor::_tree_activate_shader));
+	shader_editor->set_shader_dependency_tree(shader_dependency_tree);
 
 	add_child(disk_changed);
 

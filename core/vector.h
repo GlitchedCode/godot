@@ -33,14 +33,17 @@
 
 /**
  * @class Vector
- * @author Juan Linietsky
- * Vector container. Regular Vector Container. Use with care and for smaller arrays when possible. Use PoolVector for large arrays.
+ * Vector container. Regular Vector Container. Use with care and for smaller arrays when possible. Use Vector for large arrays.
  */
 
-#include "core/cowdata.h"
 #include "core/error_macros.h"
 #include "core/os/memory.h"
+#include "core/cowdata.h"
+#include "core/search_array.h"
 #include "core/sort_array.h"
+
+#include <climits>
+#include <initializer_list>
 
 template <class T>
 class VectorWriteProxy {
@@ -64,6 +67,8 @@ private:
 
 public:
 	bool push_back(T p_elem);
+	_FORCE_INLINE_ bool append(const T &p_elem) { return push_back(p_elem); } //alias
+	void fill(T p_elem);
 
 	void remove(int p_index) { _cowdata.remove(p_index); }
 	void erase(const T &p_val) {
@@ -71,13 +76,13 @@ public:
 		if (idx >= 0) {
 			remove(idx);
 		}
-	};
+	}
 	void invert();
 
 	_FORCE_INLINE_ T *ptrw() { return _cowdata.ptrw(); }
 	_FORCE_INLINE_ const T *ptr() const { return _cowdata.ptr(); }
 	_FORCE_INLINE_ void clear() { resize(0); }
-	_FORCE_INLINE_ bool empty() const { return _cowdata.empty(); }
+	_FORCE_INLINE_ bool empty() const { return _cowdata.is_empty(); }
 
 	_FORCE_INLINE_ T get(int p_index) { return _cowdata.get(p_index); }
 	_FORCE_INLINE_ const T &get(int p_index) const { return _cowdata.get(p_index); }
@@ -89,6 +94,10 @@ public:
 	int find(const T &p_val, int p_from = 0) const { return _cowdata.find(p_val, p_from); }
 
 	void append_array(Vector<T> p_other);
+
+	bool has(const T &p_val) const {
+		return find(p_val, 0) != -1;
+	}
 
 	template <class C>
 	void sort_custom() {
@@ -106,22 +115,165 @@ public:
 		sort_custom<_DefaultComparator<T>>();
 	}
 
+	int bsearch(const T &p_value, bool p_before) {
+		SearchArray<T> search;
+		return search.bisect(ptrw(), size(), p_value, p_before);
+	}
+
+	Vector<T> duplicate() {
+		return *this;
+	}
+
 	void ordered_insert(const T &p_val) {
 		int i;
 		for (i = 0; i < _cowdata.size(); i++) {
 			if (p_val < operator[](i)) {
 				break;
-			};
-		};
+			}
+		}
 		insert(i, p_val);
 	}
 
-	_FORCE_INLINE_ Vector() {}
-	_FORCE_INLINE_ Vector(const Vector &p_from) { _cowdata._ref(p_from._cowdata); }
-	inline Vector &operator=(const Vector &p_from) {
+	inline void operator=(const Vector &p_from) {
 		_cowdata._ref(p_from._cowdata);
-		return *this;
 	}
+
+	Vector<uint8_t> to_byte_array() const {
+		Vector<uint8_t> ret;
+		ret.resize(size() * sizeof(T));
+		memcpy(ret.ptrw(), ptr(), sizeof(T) * size());
+		return ret;
+	}
+
+	Vector<T> slice(int p_begin, int p_end = INT_MAX) const {
+		Vector<T> result;
+
+		const int s = size();
+
+		int begin = CLAMP(p_begin, -s, s);
+		if (begin < 0) {
+			begin += s;
+		}
+		int end = CLAMP(p_end, -s, s);
+		if (end < 0) {
+			end += s;
+		}
+
+		ERR_FAIL_COND_V(begin > end, result);
+
+		int result_size = end - begin;
+		result.resize(result_size);
+
+		const T *const r = ptr();
+		T *const w = result.ptrw();
+		for (int i = 0; i < result_size; ++i) {
+			w[i] = r[begin + i];
+		}
+
+		return result;
+	}
+
+	bool operator==(const Vector<T> &p_arr) const {
+		int s = size();
+		if (s != p_arr.size()) {
+			return false;
+		}
+		for (int i = 0; i < s; i++) {
+			if (operator[](i) != p_arr[i]) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	bool operator!=(const Vector<T> &p_arr) const {
+		int s = size();
+		if (s != p_arr.size()) {
+			return true;
+		}
+		for (int i = 0; i < s; i++) {
+			if (operator[](i) != p_arr[i]) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	struct Iterator {
+		_FORCE_INLINE_ T &operator*() const {
+			return *elem_ptr;
+		}
+		_FORCE_INLINE_ T *operator->() const { return elem_ptr; }
+		_FORCE_INLINE_ Iterator &operator++() {
+			elem_ptr++;
+			return *this;
+		}
+		_FORCE_INLINE_ Iterator &operator--() {
+			elem_ptr--;
+			return *this;
+		}
+
+		_FORCE_INLINE_ bool operator==(const Iterator &b) const { return elem_ptr == b.elem_ptr; }
+		_FORCE_INLINE_ bool operator!=(const Iterator &b) const { return elem_ptr != b.elem_ptr; }
+
+		Iterator(T *p_ptr) { elem_ptr = p_ptr; }
+		Iterator() {}
+		Iterator(const Iterator &p_it) { elem_ptr = p_it.elem_ptr; }
+
+	private:
+		T *elem_ptr = nullptr;
+	};
+
+	struct ConstIterator {
+		_FORCE_INLINE_ const T &operator*() const {
+			return *elem_ptr;
+		}
+		_FORCE_INLINE_ const T *operator->() const { return elem_ptr; }
+		_FORCE_INLINE_ ConstIterator &operator++() {
+			elem_ptr++;
+			return *this;
+		}
+		_FORCE_INLINE_ ConstIterator &operator--() {
+			elem_ptr--;
+			return *this;
+		}
+
+		_FORCE_INLINE_ bool operator==(const ConstIterator &b) const { return elem_ptr == b.elem_ptr; }
+		_FORCE_INLINE_ bool operator!=(const ConstIterator &b) const { return elem_ptr != b.elem_ptr; }
+
+		ConstIterator(const T *p_ptr) { elem_ptr = p_ptr; }
+		ConstIterator() {}
+		ConstIterator(const ConstIterator &p_it) { elem_ptr = p_it.elem_ptr; }
+
+	private:
+		const T *elem_ptr = nullptr;
+	};
+
+	_FORCE_INLINE_ Iterator begin() {
+		return Iterator(ptrw());
+	}
+	_FORCE_INLINE_ Iterator end() {
+		return Iterator(ptrw() + size());
+	}
+
+	_FORCE_INLINE_ ConstIterator begin() const {
+		return ConstIterator(ptr());
+	}
+	_FORCE_INLINE_ ConstIterator end() const {
+		return ConstIterator(ptr() + size());
+	}
+
+	_FORCE_INLINE_ Vector() {}
+	_FORCE_INLINE_ Vector(std::initializer_list<T> p_init) {
+		Error err = _cowdata.resize(p_init.size());
+		ERR_FAIL_COND(err);
+
+		int i = 0;
+		for (const T &element : p_init) {
+			_cowdata.set(i++, element);
+		}
+	}
+	_FORCE_INLINE_ Vector(const Vector &p_from) { _cowdata._ref(p_from._cowdata); }
 
 	_FORCE_INLINE_ ~Vector() {}
 };
@@ -154,6 +306,14 @@ bool Vector<T>::push_back(T p_elem) {
 	set(size() - 1, p_elem);
 
 	return false;
+}
+
+template <class T>
+void Vector<T>::fill(T p_elem) {
+	T *p = ptrw();
+	for (int i = 0; i < size(); i++) {
+		p[i] = p_elem;
+	}
 }
 
 #endif

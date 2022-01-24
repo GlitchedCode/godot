@@ -33,6 +33,7 @@
 
 #include "core/io/resource_loader.h"
 #include "core/io/resource_saver.h"
+#include "core/hash_map.h"
 #include "core/resource.h"
 #include "scene/resources/texture.h"
 
@@ -53,6 +54,8 @@ private:
 	RID shader;
 	Mode mode;
 	String shader_custom_defines;
+	HashMap<String, String> preprocessor_defines;
+	String source_code;
 
 	// hack the name of performance
 	// shaders keep a list of ShaderMaterial -> VisualServer name translations, to make
@@ -71,6 +74,13 @@ public:
 
 	void set_code(const String &p_code);
 	String get_code() const;
+
+	void set_preprocessor_define(String name, String body);
+	void unset_preprocessor_define(String name);
+	bool is_preprocessor_macro_defined(String name);
+	String get_preprocessor_define(String name);
+
+	void recompile();
 
 	void get_param_list(List<PropertyInfo> *p_params) const;
 	bool has_param(const StringName &p_param) const;

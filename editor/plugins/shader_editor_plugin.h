@@ -36,15 +36,22 @@
 #include "scene/gui/menu_button.h"
 #include "scene/gui/panel_container.h"
 #include "scene/gui/tab_container.h"
+#include "scene/gui/tree.h"
 #include "scene/gui/text_edit.h"
 #include "scene/main/timer.h"
 #include "scene/resources/shader.h"
+#include "servers/visual/shader_preprocessor.h"
 #include "servers/visual/shader_language.h"
+
+class ShaderEditor;
 
 class ShaderTextEditor : public CodeTextEditor {
 	GDCLASS(ShaderTextEditor, CodeTextEditor);
 
+	Tree *shader_dependency_tree;
 	Ref<Shader> shader;
+	String error_shader_path;
+	ShaderEditor *shader_editor;
 
 	void _check_shader_mode();
 
@@ -56,11 +63,17 @@ protected:
 
 public:
 	virtual void _validate_script();
+	virtual void goto_error() override;
 
 	void reload_text();
 
+	void set_shader_editor(ShaderEditor *p_editor);
+
+	void set_shader_dependency_tree(Tree *p_tree);
+
 	Ref<Shader> get_edited_shader() const;
 	void set_edited_shader(const Ref<Shader> &p_shader);
+	void set_edited_shader(const Ref<Shader> &p_shader, String p_code);
 	ShaderTextEditor();
 };
 
@@ -92,6 +105,7 @@ class ShaderEditor : public PanelContainer {
 		BOOKMARK_GOTO_NEXT,
 		BOOKMARK_GOTO_PREV,
 		BOOKMARK_REMOVE_ALL,
+		VIEW_SHADER_DEPENDENCIES,
 		HELP_DOCS,
 	};
 
@@ -108,6 +122,8 @@ class ShaderEditor : public PanelContainer {
 
 	ShaderTextEditor *shader_editor;
 
+	Tree *shader_dependency_tree;
+
 	void _menu_option(int p_option);
 	void _params_changed();
 	mutable Ref<Shader> shader;
@@ -116,6 +132,10 @@ class ShaderEditor : public PanelContainer {
 
 	void _check_for_external_edit();
 	void _reload_shader_from_disk();
+
+	void _tree_activate_shader();
+
+	void _update_shader_dependency_tree_items(TreeItem *p_parent_tree_item, ShaderDependencyNode *p_node);
 
 protected:
 	void _notification(int p_what);
@@ -127,10 +147,18 @@ protected:
 	void _bookmark_item_pressed(int p_idx);
 
 public:
+	Map<String, String> shader_rolling_code;
+	ShaderDependencyGraph shader_dependencies;
+	void _update_shader_dependency_tree();
+
 	void apply_shaders();
+
+	Ref<Shader> get_shader();
 
 	void ensure_select_current();
 	void edit(const Ref<Shader> &p_shader);
+
+	void open_path(String p_path);
 
 	void goto_line_selection(int p_line, int p_begin, int p_end);
 

@@ -235,11 +235,12 @@ public:
 	void update_editor_settings();
 	void set_error(const String &p_error);
 	void set_error_pos(int p_line, int p_column);
+	void get_error_pos(int &p_line, int &p_column);
 	void update_line_and_column() { _line_col_changed(); }
 	TextEdit *get_text_edit() { return text_editor; }
 	FindReplaceBar *get_find_replace_bar() { return find_replace_bar; }
 	virtual void apply_code() {}
-	void goto_error();
+	virtual void goto_error();
 
 	void toggle_bookmark();
 	void goto_next_bookmark();

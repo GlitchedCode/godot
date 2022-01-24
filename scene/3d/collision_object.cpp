@@ -203,7 +203,7 @@ bool CollisionObject::_are_collision_shapes_visible() {
 
 void CollisionObject::_update_shape_data(uint32_t p_owner) {
 	if (_are_collision_shapes_visible()) {
-		if (debug_shapes_to_update.empty()) {
+		if (debug_shapes_to_update.is_empty()) {
 			call_deferred("_update_debug_shapes");
 		}
 		debug_shapes_to_update.insert(p_owner);

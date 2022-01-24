@@ -32,15 +32,14 @@
 #define HASH_MAP_H
 
 #include "core/error_macros.h"
-#include "core/hashfuncs.h"
-#include "core/list.h"
 #include "core/math/math_funcs.h"
 #include "core/os/memory.h"
 #include "core/ustring.h"
+#include "core/hashfuncs.h"
+#include "core/list.h"
 
 /**
  * @class HashMap
- * @author Juan Linietsky <reduzio@gmail.com>
  *
  * Implementation of a standard Hashing HashMap, for quick lookups of Data associated with a Key.
  * The implementation provides hashers for the default types, if you need a special kind of hasher, provide
@@ -48,7 +47,8 @@
  * @param TKey  Key, search is based on it, needs to be hasheable. It is unique in this container.
  * @param TData Data, data associated with the key
  * @param Hasher Hasher object, needs to provide a valid static hash function for TKey
- * @param Comparator comparator object, needs to be able to safely compare two TKey values. It needs to ensure that x == x for any items inserted in the map. Bear in mind that nan != nan when implementing an equality check.
+ * @param Comparator comparator object, needs to be able to safely compare two TKey values.
+ * It needs to ensure that x == x for any items inserted in the map. Bear in mind that nan != nan when implementing an equality check.
  * @param MIN_HASH_TABLE_POWER Miminum size of the hash table, as a power of two. You rarely need to change this parameter.
  * @param RELATIONSHIP Relationship at which the hash table is resized. if amount of elements is RELATIONSHIP
  * times bigger than the hash table, table is resized to solve this condition. if RELATIONSHIP is zero, table is always MIN_HASH_TABLE_POWER.
@@ -75,9 +75,9 @@ public:
 	private:
 		friend class HashMap;
 
-		uint32_t hash;
-		Element *next;
-		Element() { next = nullptr; }
+		uint32_t hash = 0;
+		Element *next = nullptr;
+		Element() {}
 		Pair pair;
 
 	public:
@@ -101,9 +101,9 @@ public:
 	};
 
 private:
-	Element **hash_table;
-	uint8_t hash_table_power;
-	uint32_t elements;
+	Element **hash_table = nullptr;
+	uint8_t hash_table_power = 0;
+	uint32_t elements = 0;
 
 	void make_hash_table() {
 		ERR_FAIL_COND(hash_table);
@@ -278,7 +278,7 @@ public:
 
 	/**
 	 * Get a key from data, return a const reference.
-	 * WARNING: this doesn't check errors, use either getptr and check NULL, or check
+	 * WARNING: this doesn't check errors, use either getptr and check nullptr, or check
 	 * first with has(key)
 	 */
 
@@ -295,7 +295,7 @@ public:
 	}
 
 	/**
-	 * Same as get, except it can return NULL when item was not found.
+	 * Same as get, except it can return nullptr when item was not found.
 	 * This is mainly used for speed purposes.
 	 */
 
@@ -328,7 +328,7 @@ public:
 	}
 
 	/**
-	 * Same as get, except it can return NULL when item was not found.
+	 * Same as get, except it can return nullptr when item was not found.
 	 * This version is custom, will take a hash and a custom key (that should support operator==()
 	 */
 
@@ -359,7 +359,7 @@ public:
 	template <class C>
 	_FORCE_INLINE_ const TData *custom_getptr(C p_custom_key, uint32_t p_custom_hash) const {
 		if (unlikely(!hash_table)) {
-			return NULL;
+			return nullptr;
 		}
 
 		uint32_t hash = p_custom_hash;
@@ -377,7 +377,7 @@ public:
 			e = e->next;
 		}
 
-		return NULL;
+		return nullptr;
 	}
 
 	/**
@@ -447,12 +447,12 @@ public:
 
 	/**
 	 * Get the next key to p_key, and the first key if p_key is null.
-	 * Returns a pointer to the next key if found, NULL otherwise.
+	 * Returns a pointer to the next key if found, nullptr otherwise.
 	 * Adding/Removing elements while iterating will, of course, have unexpected results, don't do it.
 	 *
 	 * Example:
 	 *
-	 * 	const TKey *k=NULL;
+	 * 	const TKey *k=nullptr;
 	 *
 	 * 	while( (k=table.next(k)) ) {
 	 *
@@ -528,44 +528,22 @@ public:
 		copy_from(p_table);
 	}
 
-	HashMap() {
-		hash_table = nullptr;
-		elements = 0;
-		hash_table_power = 0;
-	}
-
-	void get_key_value_ptr_array(const Pair **p_pairs) const {
+	void get_key_list(List<TKey> *r_keys) const {
 		if (unlikely(!hash_table)) {
 			return;
 		}
 		for (int i = 0; i < (1 << hash_table_power); i++) {
 			Element *e = hash_table[i];
 			while (e) {
-				*p_pairs = &e->pair;
-				p_pairs++;
+				r_keys->push_back(e->pair.key);
 				e = e->next;
 			}
 		}
 	}
 
-	void get_key_list(List<TKey> *p_keys) const {
-		if (unlikely(!hash_table)) {
-			return;
-		}
-		for (int i = 0; i < (1 << hash_table_power); i++) {
-			Element *e = hash_table[i];
-			while (e) {
-				p_keys->push_back(e->pair.key);
-				e = e->next;
-			}
-		}
-	}
+	HashMap() {}
 
 	HashMap(const HashMap &p_table) {
-		hash_table = nullptr;
-		elements = 0;
-		hash_table_power = 0;
-
 		copy_from(p_table);
 	}
 
@@ -574,4 +552,4 @@ public:
 	}
 };
 
-#endif
+#endif // HASH_MAP_H

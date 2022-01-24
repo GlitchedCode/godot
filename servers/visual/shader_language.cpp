@@ -29,6 +29,7 @@
 /*************************************************************************/
 
 #include "shader_language.h"
+#include "shader_preprocessor.h"
 #include "core/os/os.h"
 #include "core/print_string.h"
 #include "servers/visual_server.h"
@@ -5639,6 +5640,24 @@ Error ShaderLanguage::_validate_datatype(DataType p_type) {
 	return OK;
 }
 
+String ShaderLanguage::_preprocess_shader(const String &p_code, Error *r_error) {
+	*r_error = OK;
+
+	ShaderPreprocessor processor(p_code);
+	String processed = processor.preprocess();
+
+	PreprocessorState *state = processor.get_state();
+	if (!state->error.empty()) {
+		error_line = state->error_line;
+		error_set = true;
+		error_str = state->error;
+
+		*r_error = FAILED;
+	}
+
+	return processed;
+}
+
 Error ShaderLanguage::_parse_shader(const Map<StringName, FunctionInfo> &p_functions, const Vector<StringName> &p_render_modes, const Set<String> &p_shader_types) {
 	Token tk = _get_token();
 
@@ -6878,12 +6897,19 @@ String ShaderLanguage::get_shader_type(const String &p_code) {
 Error ShaderLanguage::compile(const String &p_code, const Map<StringName, FunctionInfo> &p_functions, const Vector<StringName> &p_render_modes, const Set<String> &p_shader_types) {
 	clear();
 
-	code = p_code;
+	Error err = OK;
+	code = _preprocess_shader(p_code, &err);
+	if(err != OK) {
+		return err;
+	}
+
+	// clear after preprocessing. Because preprocess uses the resource loader, it means if this instance is held in a singleton, it can have a changed state after.
+	clear();
 
 	nodes = nullptr;
 
 	shader = alloc_node<ShaderNode>();
-	Error err = _parse_shader(p_functions, p_render_modes, p_shader_types);
+	err = _parse_shader(p_functions, p_render_modes, p_shader_types);
 
 	if (err != OK) {
 		return err;
@@ -6894,7 +6920,11 @@ Error ShaderLanguage::compile(const String &p_code, const Map<StringName, Functi
 Error ShaderLanguage::complete(const String &p_code, const Map<StringName, FunctionInfo> &p_functions, const Vector<StringName> &p_render_modes, const Set<String> &p_shader_types, List<ScriptCodeCompletionOption> *r_options, String &r_call_hint) {
 	clear();
 
-	code = p_code;
+	Error err = OK;
+	code = _preprocess_shader(p_code, &err);
+	if(err != OK) {
+		return err;
+	}
 
 	nodes = nullptr;
 
