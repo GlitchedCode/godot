@@ -6843,6 +6843,19 @@ static int _get_first_ident_pos(const String &p_code) {
 				}
 				idx++;
 			}
+		} else if (GETCHAR(0) == '#') {
+			idx += 1;
+			while (true)
+			{
+				if(GETCHAR(0) == 0) {
+					return 0;
+				}
+				if(GETCHAR(0) == '\n'){
+					idx++;
+					break; // loop
+				}
+				idx++;
+			}
 		} else {
 			switch (GETCHAR(0)) {
 				case ' ':

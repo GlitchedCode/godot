@@ -33,7 +33,6 @@
 #include "scene/scene_string_names.h"
 #include "servers/visual/shader_language.h"
 #include "servers/visual_server.h"
-#include "core/print_string.h"
 #include "texture.h"
 
 Shader::Mode Shader::get_mode() const {
