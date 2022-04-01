@@ -617,6 +617,21 @@ namespace Godot
         }
 
         /// <summary>
+        /// Constructs a <see cref="Color"/> from RGBA values, typically on the range of 0 to 1.
+        /// </summary>
+        /// <param name="r">The color's red component, typically on the range of 0 to 1.</param>
+        /// <param name="g">The color's green component, typically on the range of 0 to 1.</param>
+        /// <param name="b">The color's blue component, typically on the range of 0 to 1.</param>
+        /// <param name="a">The color's alpha (transparency) value, typically on the range of 0 to 1. Default: 1.</param>
+        public Color(double r, double g, double b, double a = 1.0f)
+        {
+            this.r = (float)r;
+            this.g = (float)g;
+            this.b = (float)b;
+            this.a = (float)a;
+        }
+
+        /// <summary>
         /// Constructs a <see cref="Color"/> from an existing color and an alpha value.
         /// </summary>
         /// <param name="c">The color to construct from. Only its RGB values are used.</param>
